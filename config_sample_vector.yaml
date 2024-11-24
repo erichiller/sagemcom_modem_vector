@@ -1,0 +1,55 @@
+# https://vector.dev/docs/reference/configuration/
+
+# https://vector.dev/docs/reference/configuration/global-options/
+
+# optional
+# data_dir: /var/lib/vector/
+
+# https://vector.dev/docs/reference/api/
+api:  # optional
+  enabled: true
+  graphql: true
+  playground: true
+  # address: 127.0.0.1:8686
+  address: 0.0.0.0:8686
+
+sources:
+  # https://vector.dev/docs/reference/configuration/sources/exec/
+  modem_api:
+    type: exec
+    command: [
+      "python",
+      "program.py",
+    ]
+    working_directory: "/etc/vector/"  # modify as needed
+    mode: scheduled
+    scheduled:
+      exec_interval_secs: 60 # Every 1 minute
+    # https://docs.python.org/3/using/cmdline.html
+    environment:
+      PYTHONPATH: "/etc/vector/.venv/lib64/python3.12/site-packages/" # maybe needed depending on environment
+      SAGEMCOM_HOST: "192.168.xxx.xxx"
+      SAGEMCOM_PASSWORD: "my_secret_password"
+    decoding:
+      codec: native_json
+
+sinks:
+
+  # Metrics and label naming
+  # https://prometheus.io/docs/practices/naming/
+  # https://vector.dev/docs/reference/configuration/sinks/prometheus_exporter
+  mimir:
+    type: prometheus_remote_write
+    endpoint: https://my-endpoint.tld:8080/api/v1/push
+    healthcheck:
+      enabled: false
+    inputs:
+      - modem_api
+
+  console:
+    type: console
+    inputs:
+      - modem_api
+    encoding:
+      codec: json
+

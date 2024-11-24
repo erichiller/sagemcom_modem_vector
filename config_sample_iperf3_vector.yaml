@@ -1,0 +1,186 @@
+
+data_dir: /etc/vector/iperf_tests/vector_data_dir  # optional
+
+sources:
+  # URGENT: needs an offset added so that it doesn't run the same time as upload or speedtest.net
+  iperf_download:
+    type: exec
+    mode: scheduled
+    scheduled:
+      exec_interval_secs: 43200 # Every 12 hours
+    environment:
+      ID_RSA_PATH: my_id.rsa
+      REMOTE_USER: my_user
+      REMOTE_HOST: "destination.server.tld"
+    command:
+      - iperf3-download.sh
+    decoding:
+      codec: json
+    framing:
+      method: bytes
+
+  # URGENT: needs an offset added so that it doesn't run the same time as upload or speedtest.net
+  iperf_upload:
+    type: exec
+    mode: scheduled
+    scheduled:
+      exec_interval_secs: 43200 # Every 12 hours
+    environment:
+      ID_RSA_PATH: my_id.rsa
+      REMOTE_USER: my_user
+      REMOTE_HOST: "destination.server.tld"
+    command:
+      - iperf3-upload.sh
+    decoding:
+      codec: json
+    framing:
+      method: bytes
+
+
+transforms:
+  iperf_upload_remap:
+    type: remap
+    inputs:
+      - iperf_upload
+    source: |-
+      .timestamp = from_unix_timestamp!(.start.timestamp.timesecs)
+      .max_rtt_sec = .end.streams[0].sender.max_rtt / 1000 / 1000;
+      .min_rtt_sec = .end.streams[0].sender.max_rtt / 1000 / 1000;
+      .mean_rtt_sec = .end.streams[0].sender.mean_rtt / 1000 / 1000;
+
+  iperf_upload_log_to_metric:
+    # https://vector.dev/docs/reference/configuration/transforms/log_to_metric/
+    type: log_to_metric
+    inputs: # A list of upstream source or transform IDs.
+      - iperf_upload_remap
+    metrics:
+      - type: gauge
+        field: end.sum_received.bits_per_second
+        name: bits_per_sec
+        namespace: "iperf_upload"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{intervals[3].streams[0].pmtu}}"
+      - type: gauge
+        field: max_rtt_sec
+        name: max_rtt_sec
+        namespace: "iperf_upload"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{intervals[3].streams[0].pmtu}}"
+      - type: gauge
+        field: min_rtt_sec
+        name: min_rtt_sec
+        namespace: "iperf_upload"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{intervals[3].streams[0].pmtu}}"
+      - type: gauge
+        field: mean_rtt_sec
+        name: mean_rtt_sec
+        namespace: "iperf_upload"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{intervals[3].streams[0].pmtu}}"
+      - type: gauge
+        field: end.sum_sent.retransmits
+        name: retransmits
+        namespace: "iperf_upload"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{intervals[3].streams[0].pmtu}}"
+
+
+  iperf_download_remap:
+    type: remap
+    inputs:
+      - iperf_download
+    source: |-
+      .timestamp = from_unix_timestamp!(.start.timestamp.timesecs)
+      .max_rtt_sec = .server_output_json.end.streams[0].sender.max_rtt / 1000 / 1000;
+      .min_rtt_sec = .server_output_json.end.streams[0].sender.max_rtt / 1000 / 1000;
+      .mean_rtt_sec = .server_output_json.end.streams[0].sender.mean_rtt / 1000 / 1000;
+
+  iperf_download_log_to_metric:
+    # https://vector.dev/docs/reference/configuration/transforms/log_to_metric/
+    type: log_to_metric
+    inputs: # A list of upstream source or transform IDs.
+      - iperf_download_remap
+    metrics:
+      - type: gauge
+        field: end.sum_received.bits_per_second
+        name: bits_per_sec
+        namespace: "iperf_download"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{server_output_json.intervals[3].streams[0].pmtu}}"
+      - type: gauge
+        field: max_rtt_sec
+        name: max_rtt_sec
+        namespace: "iperf_download"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{server_output_json.intervals[3].streams[0].pmtu}}"
+      - type: gauge
+        field: min_rtt_sec
+        name: min_rtt_sec
+        namespace: "iperf_download"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{server_output_json.intervals[3].streams[0].pmtu}}"
+      - type: gauge
+        field: mean_rtt_sec
+        name: mean_rtt_sec
+        namespace: "iperf_download"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{server_output_json.intervals[3].streams[0].pmtu}}"
+      - type: gauge
+        field: end.sum_sent.retransmits
+        name: retransmits
+        namespace: "iperf_download"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_ip: "{{start.connected[0].remote_host}}"
+          client_ip: "{{server_output_json.start.accepted_connection.host}}"
+          server_hostname: "{{start.connecting_to.host}}"
+          pmtu: "{{server_output_json.intervals[3].streams[0].pmtu}}"
+
+sinks:
+  # add desired sink here, e.g. Prometheus
+  console_out:
+    type: console
+    inputs:
+      - iperf_upload_log_to_metric
+      - iperf_download_log_to_metric
+    encoding:
+      codec: json
+      json:
+        pretty: true

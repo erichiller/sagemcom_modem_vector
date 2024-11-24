@@ -1,0 +1,48 @@
+
+data_dir: /etc/vector/ping_tests/vector_data_dir # optional
+
+sources:
+  ping_remote:
+    type: exec
+    mode: scheduled
+    scheduled:
+      exec_interval_secs: 15
+    include_stderr: false
+    command: [
+      # 5 count flood ping spaced 50ms apart
+      ping, "-q", "-f", "-c", "5", "-i", "0.050", 
+      "destination.server.tld"
+    ]
+    decoding:
+      codec: bytes
+    framing:
+      method: bytes
+
+transforms:
+  ping_transform:
+    type: remap
+    inputs: [ ping_remote ]
+    source: |-
+      .parsed = parse_regex!(.message, r'PING\s+(?P<remote_hostname>[^ ]+)\s*\((?P<remote_ip>[^\)]+)\)\s+(?<bytes>\d+) data bytes\s+.*\n(?P<packets_sent>\d+) packets transmitted, (?P<packets_received>\d+) received, (?P<packets_loss_percent>\d+)% packet loss, time (?P<total_time_ms>\d+)ms\nrtt min/avg/max/mdev = (?P<rtt_min_ms>\d+\.\d+)/(?P<rtt_avg_ms>\d+\.\d+)/(?P<rtt_max_ms>\d+\.\d+)/(?P<rtt_mdev_ms>\d+\.\d+) ms')
+      .transformed = true
+      .parsed.bytes = to_int!(.parsed.bytes)
+      .parsed.packets_loss_percent = to_float!(.parsed.packets_loss_percent)
+      .parsed.packets_received = to_int!(.parsed.packets_received)
+      .parsed.packets_sent = to_int!(.parsed.packets_sent)
+      .parsed.rtt_min_ms = to_float!(.parsed.rtt_min_ms)
+      .parsed.rtt_avg_ms = to_float!(.parsed.rtt_avg_ms)
+      .parsed.rtt_max_ms = to_float!(.parsed.rtt_max_ms)
+      .parsed.rtt_mdev_ms = to_float!(.parsed.rtt_mdev_ms)
+      .parsed.total_time_ms = to_int!(.parsed.total_time_ms)
+
+
+sinks:
+  # add desired sink here, e.g. Prometheus
+  console_out:
+    type: console
+    inputs:
+      - ping_transform
+    encoding:
+      codec: json
+      json:
+        pretty: true

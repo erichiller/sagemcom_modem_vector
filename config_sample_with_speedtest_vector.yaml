@@ -1,0 +1,243 @@
+# https://vector.dev/docs/reference/configuration/
+
+# https://vector.dev/docs/reference/configuration/global-options/
+
+# optional
+# data_dir: /var/lib/vector/
+
+# https://vector.dev/docs/reference/api/
+api:  # optional
+  enabled: true
+  graphql: true
+  playground: true
+  # address: 127.0.0.1:8686
+  address: 0.0.0.0:8686
+
+sources:
+  # https://vector.dev/docs/reference/configuration/sources/exec/
+  modem_api:
+    type: exec
+    command: [
+      "python",
+      "program.py",
+    ]
+    working_directory: "/etc/vector/"  # modify as needed
+    mode: scheduled
+    scheduled:
+      exec_interval_secs: 60 # Every 1 minute
+    # https://docs.python.org/3/using/cmdline.html
+    environment:
+      PYTHONPATH: "/etc/vector/.venv/lib64/python3.12/site-packages/" # maybe needed depending on environment
+      SAGEMCOM_HOST: "192.168.xxx.xxx"
+      SAGEMCOM_PASSWORD: "my_secret_password"
+    decoding:
+      codec: native_json
+
+  # SETUP: MUST ACCEPT EULA ON THE 'vector' USER BEFORE THIS WILL WORK: (RUN THE BELOW ONCE)
+  # sudo -u vector speedtest --selection-details --server-id=xxx --format=json
+  speedtest_cli_exec:
+    type: exec
+    command: [
+      "speedtest",
+      "--selection-details",
+      "--server-id=xxx",  # recommended to pin to a specific server, but not required
+      "--format=json"
+    ]
+    mode: scheduled
+    scheduled:
+      exec_interval_secs: 43200 # Every 12 hours
+    decoding:
+      codec: json
+
+transforms:
+  # remap
+  speedtest_cli_format_time:
+    type: remap
+    inputs:
+      - speedtest_cli_exec
+    # https://vector.dev/docs/reference/vrl/
+    source: |-
+      .timestamp = parse_timestamp!(.timestamp, "%+")
+      .ping.jitter = float!(.ping.jitter) / 1000
+      .ping.low = float!(.ping.low) / 1000
+      .ping.high = float!(.ping.high) / 1000
+      .ping.latency = float!(.ping.latency) / 1000
+      .download.bandwidth = int!(.download.bandwidth) * 8
+      .download.latency.iqm = float!(.download.latency.iqm) / 1000
+      .download.latency.low = float!(.download.latency.low) / 1000
+      .download.latency.high = float!(.download.latency.high) / 1000
+      .download.latency.jitter = float!(.download.latency.jitter) / 1000
+      .upload.bandwidth = int!(.upload.bandwidth) * 8
+      .upload.latency.iqm = float!(.upload.latency.iqm) / 1000
+      .upload.latency.low = float!(.upload.latency.low) / 1000
+      .upload.latency.high = float!(.upload.latency.high) / 1000
+      .upload.latency.jitter = float!(.upload.latency.jitter) / 1000
+
+  speedtest_cli_exec_output_to_metrics:
+    type: log_to_metric
+    inputs:
+      - speedtest_cli_format_time
+    metrics:
+      - type: gauge
+        field: ping.jitter
+        name: jitter_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: ping.low
+        name: ping_min_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: ping.high
+        name: ping_max_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: ping.latency
+        name: ping_avg_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: download.bandwidth
+        name: download_bits_per_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: download.latency.iqm
+        name: download_latency_iqm_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: download.latency.low
+        name: download_latency_low_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: download.latency.high
+        name: download_latency_high_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: download.latency.jitter
+        name: download_latency_jitter_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: upload.bandwidth
+        name: upload_bits_per_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: upload.latency.iqm
+        name: upload_latency_iqm_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: upload.latency.low
+        name: upload_latency_low_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: upload.latency.high
+        name: upload_latency_high_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+      - type: gauge
+        field: upload.latency.jitter
+        name: upload_latency_jitter_sec
+        namespace: "speedtest_net"
+        timestamp: "{{timestamp}}"
+        tags:
+          server_id: "{{server.id}}"
+          server_host: "{{.server.host}}"
+          host_interface: "{{interface.name}}"
+          server_ip: "{{server.ip}}"
+
+
+sinks:
+
+  # https://vector.dev/docs/reference/configuration/sinks/prometheus_exporter
+  mimir:
+    type: prometheus_remote_write
+    endpoint: https://my-endpoint.tld:8080/api/v1/push
+    healthcheck:
+      enabled: false
+    inputs:
+      - modem_api
+      - speedtest_cli_exec_output_to_metrics
+
+  console:
+    type: console
+    inputs:
+      - modem_api
+    encoding:
+      codec: json
+
+# Metrics and label naming
+# https://prometheus.io/docs/practices/naming/
